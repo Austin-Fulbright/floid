@@ -1,4 +1,3 @@
-
 class Vector2 {
 	x: number;
 	y: number;
@@ -21,6 +20,9 @@ class Vector2 {
 	length(): number {
 		return Math.sqrt(this.x*this.x + this.y*this.y);
 	}
+	distanceTo(that: Vector2): number {
+		return that.sub(this).length(); 
+	}
 	norm(): Vector2 {
 		const l = this.length();
 		if (l == 0) return new Vector2(0, 0);
@@ -33,6 +35,7 @@ class Vector2 {
 		return [this.x, this.y];
 	}
 }
+const EPS = 1e-3;
 const GRID_ROWS = 10
 const GRID_COLS = 10;
 const GRID_SIZE = new Vector2(GRID_COLS, GRID_ROWS);
@@ -41,24 +44,50 @@ function canvasSize(ctx: CanvasRenderingContext2D): Vector2 {
 	return new Vector2(ctx.canvas.width, ctx.canvas.height);
 
 }
+
+function snap(dx: number, x: number): number {
+	if (dx > 0) return Math.ceil(x + Math.sign(dx)*EPS);
+	if (dx < 0) return Math.floor(x + Math.sign(dx)*EPS);
+	return x;
+}
+
+function hittingCell(p1: Vector2, p2: Vector2): Vector2 {
+	const d = p2.sub(p1);
+	return new Vector2(Math.floor(p2.x + Math.sign(d.x) * EPS),
+					   Math.floor(p2.y + Math.sign(d.y) * EPS));
+}
+
 function rayStep(p1: Vector2, p2: Vector2): Vector2 {
-	const rise = p2.y - p1.y;
-	const run = p2.x - p1.x;
-	let k = 1;
-	if (run !== 0) {
-		k = (p2.y - p1.y) / (p2.x - p1.x);
-	}
-	const c = p1.y - k * p1.x
-	let x3 = 0;
-	if (run > 0){
-		x3 = Math.ceil(p2.x);
-	}
-	if (run < 0) {
-		x3 = Math.floor(p2.x);
+	const EPS = 1e-3;
+	const d = p2.sub(p1);
+	let p3 = p2;
+	if (d.x !== 0) {
+		const k = d.y / d.x;
+		const c = p1.y - k * p1.x;
+		{
+			const x = snap(d.x, p2.x);
+			const y = k * x + c;
+			//ctx.fillStyle = "green";
+			p3 = new Vector2(x, y);
+			//fillCircle(ctx, new Vector2(x, y), 0.2);
+		}
+		if (k !== 0) {
+			const y = snap(d.y, p2.y);
+			const x = (y - c)/k;
+			const p3temp = new Vector2(x, y);
+			if (p2.distanceTo(p3temp) < p2.distanceTo(p3)) {
+				p3 = p3temp;
+			}
+			//ctx.fillStyle = "cyan";
+			//fillCircle(ctx, new Vector2(x, y), 0.2);
+		}	
+	} else {
+		const y = snap(d.y, p2.y);
+		const x = p2.x
+		p3 = new Vector2(x, y);
 	}
 
-	let y3 = k * x3 + c;
-	return new Vector2(x3, y3); 
+	return p3;
 }
 function fillCircle(ctx: CanvasRenderingContext2D, center: Vector2, radius: number) {
 	ctx.beginPath();
@@ -89,16 +118,23 @@ function grid(ctx: CanvasRenderingContext2D, p2: Vector2 | undefined) {
 		strokeLine(ctx, new Vector2(0, y), new Vector2(GRID_COLS, y));
 	}
 
-	const p1 = new Vector2(GRID_ROWS * 0.44, GRID_COLS * 0.33);
+	let p1 = new Vector2(GRID_ROWS * 0.44, GRID_COLS * 0.33);
 	ctx.fillStyle = "pink";
 	fillCircle(ctx, p1, 0.2);
 	if (p2 !== undefined) {
-		fillCircle(ctx, p2, 0.2);
-		ctx.strokeStyle = "pink";
-		strokeLine(ctx, p1, p2);
-		const p3 = rayStep(p1, p2);
-		fillCircle(ctx, p3, 0.2);
-		strokeLine(ctx, p2, p3)
+		for (;;) {
+			const c = hittingCell(p1, p2);
+			fillCircle(ctx, p2, 0.2);
+			ctx.strokeStyle = "pink";
+			strokeLine(ctx, p1, p2);
+			if (c.x < 0 || c.x >= GRID_SIZE.x || c.y < 0 || c.y >= GRID_SIZE.y) {
+				break;
+			}
+
+			const p3 = rayStep(p1, p2);
+			p1 = p2;
+			p2 = p3;
+		}
 	}
 	
 
